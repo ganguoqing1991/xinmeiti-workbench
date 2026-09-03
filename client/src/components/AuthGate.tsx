@@ -207,6 +207,9 @@ const AuthGate: React.FC<{ children: React.ReactNode }> = ({ children }) => {
           </div>
           <p className="text-white text-sm font-medium">初始化工作台</p>
           <p className="text-xs text-white/45 mt-1">名册里还没有人，先创建第一个账号（自动成为总监）</p>
+          <p className="text-[10px] text-amber-200/60 mt-2 leading-relaxed px-4">
+            账号与业务数据保存在当前浏览器的 localStorage 中。如果使用无痕/隐私模式、沙箱预览或浏览器自动清理站点数据，刷新后可能会再次回到此页面。
+          </p>
         </div>
         <div className="space-y-3">
           <div>
