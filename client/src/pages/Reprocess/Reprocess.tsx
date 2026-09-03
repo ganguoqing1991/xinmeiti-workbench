@@ -2,6 +2,7 @@
 // 功能：模型配置 + 任务栏 + 生成区 + 历史记录
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles,
@@ -484,13 +485,13 @@ const Reprocess: React.FC = () => {
               抖音
             </button>
           </div>
-          <a
-            href="/api"
+          <Link
+            to="/api"
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border border-white/10 bg-white/5 text-white/70 hover:bg-white/10 transition-all"
           >
             <ExternalLink className="w-4 h-4" />
             API 配置
-          </a>
+          </Link>
         </div>
       </div>
 
@@ -498,11 +499,17 @@ const Reprocess: React.FC = () => {
       {!effectiveLLM.apiKey && (
         <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-amber-400 mt-0.5" />
-          <div className="text-sm text-amber-200 leading-relaxed">
+          <div className="flex-1 text-sm text-amber-200 leading-relaxed">
             {usingShared
               ? '当前使用团队共用接口，但管理员尚未配置。请联系管理员在「API 配置 → 团队共用接口」中设置后即可使用。'
-              : '请先配置模型 API：左侧导航「API」栏目统一配置 LLM 与 ASR，完成后所有调用 API 的模块都会从这里读取。'}
+              : '请先配置模型 API：统一配置 LLM 与 ASR，完成后所有调用 API 的模块都会从这里读取。'}
           </div>
+          <Link
+            to="/api"
+            className="shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium bg-amber-500 text-amber-950 hover:bg-amber-400 transition-colors"
+          >
+            去配置
+          </Link>
         </div>
       )}
 

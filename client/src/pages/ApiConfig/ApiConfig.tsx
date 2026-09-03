@@ -2,6 +2,7 @@
 // 所有模块的 LLM / ASR 统一在这里配置，配置一次全局共享
 
 import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Key, Mic, Bot, ExternalLink, Users, Copy, Download } from 'lucide-react';
 import GlassCard from '../../components/GlassCard';
@@ -103,13 +104,13 @@ const ApiConfig: React.FC = () => {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <a
-            href="/reprocess"
+          <Link
+            to="/reprocess"
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-white/10 bg-white/5 text-white/70 hover:bg-white/10 transition-all"
           >
             <Bot className="w-3.5 h-3.5" />
             去二创加工
-          </a>
+          </Link>
         </div>
       </div>
 
