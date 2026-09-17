@@ -905,9 +905,13 @@ const ScriptPanel: React.FC<{ showToast: (t: 'success' | 'error' | 'info', m: st
   const sorted = [...filtered].sort((a, b) => (b.score ?? -1) - (a.score ?? -1));
 
   const UNCATEGORIZED = '__uncategorized__';
-  const coreOfLabel = (label: string) => label.replace(/话术$/, '').replace(/^cat-/, '').replace(/话术$/, '').trim();
+  // 存量数据里出现过 categoryKey 为 undefined 的话术（老版本文档拆分时标签兜底取到了空值），
+  // 必须在这里做空值保护：否则 undefined.replace 会抛 TypeError，把整个页面打成白屏。
+  const coreOfLabel = (label: string) => String(label ?? '').replace(/话术$/, '').replace(/^cat-/, '').replace(/话术$/, '').trim();
   // 精确 key → 核心词互含模糊匹配（修复孤儿 key 显示原始 key 的问题）
   const catOf = (key: string): { key: string; label: string; icon: string } | undefined => {
+    // key 为空一律按「未分类」处理，而不是返回 undefined 让上层显示空白
+    if (!key) return { key: UNCATEGORIZED, label: '未分类', icon: '📥' };
     if (key === UNCATEGORIZED) return { key: UNCATEGORIZED, label: '未分类', icon: '📥' };
     const exact = categories.find((c) => c.key === key);
     if (exact) return exact;
@@ -923,19 +927,19 @@ const ScriptPanel: React.FC<{ showToast: (t: 'success' | 'error' | 'info', m: st
   // 孤儿 key 自动修复：挂载时把找不到分类的话术迁移到相似分类
   React.useEffect(() => {
     const all = getScripts();
+    // 孤儿 = categoryKey 为空 / 匹配不到任何分类。这里统一兜底到「未分类」，
+    // 让存量脏数据自动自愈，而不是继续留在库里反复把页面打崩。
     const orphans = all.filter((s) => s.categoryKey !== UNCATEGORIZED && !categories.some((c) => c.key === s.categoryKey));
     if (orphans.length === 0) return;
     let fixed = 0;
     for (const s of orphans) {
-      const core = coreOfLabel(s.categoryKey);
+      const core = coreOfLabel(s.categoryKey || '');
       const target = categories.find((c) => {
         const cl = coreOfLabel(c.label);
         return cl === core || (core && (cl.includes(core) || core.includes(cl)));
       });
-      if (target) {
-        updateScript(s.id, { categoryKey: target.key });
-        fixed++;
-      }
+      updateScript(s.id, { categoryKey: target?.key || UNCATEGORIZED });
+      fixed++;
     }
     if (fixed > 0) setScripts(getScripts());
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1037,7 +1041,9 @@ ${doc.content.slice(0, 6000)}`;
     const coreOf = (label: string) => label.replace(/话术$/, '').trim();
     const ensureCategory = (tag: string): string => {
       const core = coreOf(String(tag || ''));
-      if (!core) return doc.categoryKey;
+      // 兜底到「未分类」而不是可能为空的 doc.categoryKey——老版本正是在这里
+      // 把 undefined 写进了 localStorage，成为后续白屏的元凶。
+      if (!core) return doc.categoryKey || UNCATEGORIZED;
       // ① 核心词互含匹配现有分类（'控品' 命中 '控品话术'，'转化' 命中 '转化话术'）
       const exist = currentCats.find((c) => {
         const cl = coreOf(c.label);
