@@ -1239,8 +1239,8 @@ ${sessionDigest || '（暂无场次数据，仅按话术本身质量评分）'}
                     >
                       {expanded ? <ChevronDown className="w-3.5 h-3.5 text-white/40 shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-white/40 shrink-0" />}
                       <FileText className="w-3.5 h-3.5 text-purple-300 shrink-0" />
-                      <span className="text-xs text-white font-medium truncate">{s.title || s.content.slice(0, 20) + '…'}</span>
-                      <span className="text-[10px] text-white/30 shrink-0">{s.content.length} 字</span>
+                      <span className="text-xs text-white font-medium truncate">{s.title || (s.content || '').slice(0, 20) + '…'}</span>
+                      <span className="text-[10px] text-white/30 shrink-0">{(s.content || '').length} 字</span>
                     </button>
                     <button
                       onClick={() => handleSplitOne(s)}
@@ -1257,7 +1257,7 @@ ${sessionDigest || '（暂无场次数据，仅按话术本身质量评分）'}
                         : s.score >= 6 ? 'bg-amber-500/20 text-amber-300'
                         : 'bg-white/10 text-white/50'
                       }`}>
-                        ★ 已评分 {s.score.toFixed(1)}
+                        ★ 已评分 {Number(s.score).toFixed(1)}
                       </span>
                     ) : (
                       <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/10 text-white/40 shrink-0">未评分</span>
@@ -1313,7 +1313,7 @@ ${sessionDigest || '（暂无场次数据，仅按话术本身质量评分）'}
                                   : s.score >= 6 ? 'bg-amber-500/20 text-amber-300'
                                   : 'bg-white/10 text-white/50'
                                 }`}>
-                                  ★ {s.score.toFixed(1)}
+                                  ★ {Number(s.score).toFixed(1)}
                                 </span>
                               ) : (
                                 <span className="text-[9px] px-1.5 py-0.5 rounded bg-white/10 text-white/40">未评分</span>
@@ -1370,7 +1370,7 @@ ${sessionDigest || '（暂无场次数据，仅按话术本身质量评分）'}
                     >
                       <FileText className="w-3 h-3 inline mr-1.5 text-purple-300" />
                       {d.fileName}
-                      <span className="text-white/30 ml-2">{d.content.length} 字</span>
+                      <span className="text-white/30 ml-2">{(d.content || '').length} 字</span>
                     </button>
                   ))}
                 </div>

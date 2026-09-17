@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import Sidebar from './Sidebar';
 import TopBar from './TopBar';
 import GlassCard from './GlassCard';
+import ErrorBoundary from './ErrorBoundary';
 import { useWorkspace } from '../store/workspace';
 import { canSee, moduleKeyOfPath, moduleLabelOf, MODULES } from '../utils/memberStore';
 import { setCurrentUserResolver } from '../utils/llmConfig';
@@ -84,7 +85,11 @@ const Layout = () => {
       <div className="flex-1 flex flex-col min-w-0">
         <TopBar title={title} subtitle={subtitle} />
         <main className="flex-1 overflow-y-auto scrollbar-thin p-6">
-          <Outlet />
+          {/* 页面级错误边界：单页崩溃只替换内容区，侧边栏/顶栏仍在，可直接切走。
+              key 绑 pathname，切路由时自动清掉上一页的错误状态。 */}
+          <ErrorBoundary scope="page" key={location.pathname}>
+            <Outlet />
+          </ErrorBoundary>
         </main>
       </div>
     </div>
