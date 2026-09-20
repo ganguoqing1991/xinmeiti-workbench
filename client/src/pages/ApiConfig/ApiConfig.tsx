@@ -476,10 +476,20 @@ const ImageGenPanel: React.FC<{
               <label className="text-xs text-white/50">Base URL（OpenAI images/generations 兼容）</label>
               <input
                 value={cfg.baseUrl}
-                onChange={(e) => patch({ baseUrl: e.target.value })}
-                placeholder="https://ark.cn-beijing.volces.com/api/v3"
+                onChange={(e) => {
+                  // 自动纠偏：只填到 /v3，误粘完整端点时当场剥掉
+                  const v = e.target.value
+                    .replace(/\/images\/generations\s*$/i, '')
+                    .replace(/\/chat\/completions\s*$/i, '')
+                    .replace(/\/+$/, '');
+                  patch({ baseUrl: v });
+                }}
+                placeholder="只填到 /v3，如 https://ark.cn-beijing.volces.com/api/v3"
                 className={inputCls}
               />
+              <p className="text-[10px] text-white/35 mt-1">
+                只填到版本号为止（/api/v3），不要带 /images/generations —— 粘了也会被自动剥掉
+              </p>
             </div>
           </div>
         )}

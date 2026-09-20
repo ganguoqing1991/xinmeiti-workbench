@@ -819,7 +819,12 @@ export async function callImageGen(
   prompt: string,
   onProgress?: (msg: string) => void
 ): Promise<string> {
-  const baseUrl = (imgCfg.sameAsLLM ? llmCfg.baseUrl : imgCfg.baseUrl || '').replace(/\/+$/, '');
+  // 防呆：用户容易把完整端点（…/api/v3/images/generations）粘进 Base URL，
+  // 程序会再拼一次 /images/generations 导致 404 InvalidAction。这里统一剥掉端点后缀。
+  const baseUrl = (imgCfg.sameAsLLM ? llmCfg.baseUrl : imgCfg.baseUrl || '')
+    .replace(/\/images\/generations\s*$/i, '')
+    .replace(/\/chat\/completions\s*$/i, '')
+    .replace(/\/+$/, '');
   const apiKey = imgCfg.sameAsLLM ? llmCfg.apiKey : imgCfg.apiKey;
   const model = (imgCfg.modelName || '').trim();
   if (!baseUrl) throw new Error('生图 Base URL 为空：请在「API 配置 → 生图模型」中填写');
