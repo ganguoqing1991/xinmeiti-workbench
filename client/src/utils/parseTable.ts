@@ -476,6 +476,24 @@ export function setImportedAccounts(platform: Platform, list: ParsedAccount[]) {
   writeJSON(key, list);
 }
 
+/**
+ * 是否曾经导入 / 录入过真实账号。
+ *
+ * 判定依据是「已录入池这个 key 是否存在」，而不是「当前有没有数据」——
+ * 因为用户删光账号后，key 仍在（值是空数组），必须据此认出他删过了。
+ *
+ *   从未录入       → key 不存在 → 展示内置示例账号，帮新用户看懂页面长什么样
+ *   录入过（含删空）→ key 存在   → 尊重用户数据，删空就是空，不让示例账号复活
+ */
+export function hasRealAccounts(platform: Platform): boolean {
+  const key = platform === 'xiaohongshu' ? STORAGE_KEY_ACCOUNTS_XHS : STORAGE_KEY_ACCOUNTS_DY;
+  try {
+    return localStorage.getItem(key) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function getImportedPosts(platform: Platform): ParsedPost[] {
   const key = platform === 'xiaohongshu' ? STORAGE_KEY_POSTS_XHS : STORAGE_KEY_POSTS_DY;
   return readJSON<ParsedPost[]>(key, []);

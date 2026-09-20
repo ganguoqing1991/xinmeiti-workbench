@@ -39,6 +39,7 @@ import { formatNumber } from '../../utils/format';
 import {
   getImportedAccounts,
   getImportedPosts,
+  hasRealAccounts,
   type ParsedAccount,
   type ParsedPost,
 } from '../../utils/parseTable';
@@ -77,7 +78,10 @@ const Xiaohongshu: React.FC = () => {
   // 关键修复：有真实导入数据时**不再**追加 mock 账号（否则清空已录入池后 4 个 mock 仍残留）
   const [accounts, setAccounts] = useState(() => {
     const imported = getImportedAccounts('xiaohongshu') as unknown as typeof xhsBenchmarkAccounts;
-    return imported.length > 0 ? imported : [...xhsBenchmarkAccounts];
+    if (imported.length > 0) return imported;
+    // 已录入池为空时，只有「从未录入过真实账号」才展示内置示例；
+    // 若是用户导入后主动删空的，必须保持空列表，不能让示例账号又冒出来。
+    return hasRealAccounts('xiaohongshu') ? [] : [...xhsBenchmarkAccounts];
   });
   // 已导入的内容（id → post 的 map）
   const [importedPosts, setImportedPosts] = useState<ParsedPost[]>(() => getImportedPosts('xiaohongshu'));
