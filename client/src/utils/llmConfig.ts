@@ -848,6 +848,16 @@ export async function callImageGen(
   }
   const rawText = await res.text().catch(() => '');
   if (!res.ok) {
+    // 常见坑：把文案（文本）模型名填进了生图模型名 → 服务端报 "image generation is only supported by certain models"
+    if (/image generation is only supported|not valid.*model|模型不存在|invalid model/i.test(rawText)) {
+      throw new Error(
+        `生图失败 HTTP ${res.status}：模型 "${model}" 不被该接口支持。\n\n` +
+          `「生图模型名」必须填生图模型，不能填文案模型（如 glm-*、deepseek-*、doubao-pro 等纯文本模型都不能出图）。\n` +
+          `火山方舟 Key 请填：doubao-seedream-4-0-250828（推荐）或 doubao-seedream-3-0-t2i；\n` +
+          `智谱 Key 请填：cogview-4-250304 / cogview-3-flash；OpenAI 请填：gpt-image-1。\n` +
+          `服务端原始报错：${rawText.slice(0, 160)}`
+      );
+    }
     throw new Error(`生图失败 HTTP ${res.status} · ${rawText.slice(0, 200)}`);
   }
   let j: any;

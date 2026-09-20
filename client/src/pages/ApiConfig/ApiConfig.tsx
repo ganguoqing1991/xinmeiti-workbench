@@ -4,7 +4,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Key, Mic, Bot, ExternalLink, Users, Copy, Download, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { Key, Mic, Bot, ExternalLink, Users, Copy, Download, Image as ImageIcon, Loader2, AlertCircle } from 'lucide-react';
 import GlassCard from '../../components/GlassCard';
 import { LLMConfigPanel, ASRConfigPanel } from '../../components/config/apiPanels';
 import {
@@ -376,6 +376,10 @@ const ApiConfig: React.FC = () => {
 
 export default ApiConfig;
 
+// 已知生图模型关键词（用于实时拦截「把文案模型填进生图模型名」这个高频坑）
+const KNOWN_IMAGE_MODEL_RE =
+  /(seedream|seededit|seedance|cogview|kolors|flux|sd3|sdxl|stable-diffusion|dall-e|gpt-image|jimeng|irag|image)/i;
+
 // ===== 生图模型配置面板 =====
 // OpenAI images/generations 兼容协议：火山方舟 seedream / 即梦、OpenAI gpt-image-1、硅基流动等
 // Key/BaseURL 可跟随文案模型（sameAsLLM），也可独立配置；模型名与尺寸始终独立
@@ -487,9 +491,18 @@ const ImageGenPanel: React.FC<{
             <input
               value={cfg.modelName}
               onChange={(e) => patch({ modelName: e.target.value })}
-              placeholder="如 doubao-seedream-4-0-250828 / gpt-image-1 / seedream-3.0-t2i"
+              placeholder="如 doubao-seedream-4-0-250828 / gpt-image-1 / cogview-4-250304"
               className={inputCls}
             />
+            {cfg.modelName.trim() && !KNOWN_IMAGE_MODEL_RE.test(cfg.modelName) && (
+              <p className="text-[11px] text-amber-300/90 mt-1 flex items-start gap-1 leading-relaxed">
+                <AlertCircle className="w-3 h-3 mt-0.5 shrink-0" />
+                <span>
+                  「{cfg.modelName}」看起来不是生图模型 —— 文案模型（glm-* / deepseek-* / doubao-pro 等）不能出图。
+                  生图模型名请填：火山方舟 <code>doubao-seedream-4-0-250828</code>、智谱 <code>cogview-4-250304</code>、OpenAI <code>gpt-image-1</code>。
+                </span>
+              </p>
+            )}
             <p className="text-[10px] text-white/35 mt-1">
               当前生效接口：{effBaseUrl || '（未填写）'} · Key：{effKeySet ? '已填' : '未填'}
             </p>
