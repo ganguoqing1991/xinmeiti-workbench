@@ -36,7 +36,7 @@ import {
 } from 'lucide-react';
 import GlassCard from '../../components/GlassCard';
 import Modal from '../../components/Modal';
-import { StudioPanel, PhonePreview } from './ReprocessStudio';
+import { StudioPanel, PhonePreview, ScriptPreview } from './ReprocessStudio';
 import { getReprocessTasks, removeReprocessTask, removeManyReprocessTasks, clearReprocessQueue, updateReprocessTask, type ReprocessTask } from '../../utils/reprocessQueue';
 import {
   getMyLLMConfig,
@@ -827,9 +827,13 @@ const Reprocess: React.FC = () => {
           />
         </div>
 
-        {/* 右列：手机实时预览 + 结果 + 历史 */}
+        {/* 右列：小红书=手机实时预览 / 抖音=口播稿预览，再接结果 + 历史 */}
         <div className="xl:col-span-3 space-y-5">
-          <PhonePreview task={selectedTask} />
+          {platform === 'xiaohongshu' ? (
+            <PhonePreview task={selectedTask} />
+          ) : (
+            <ScriptPreview task={selectedTask} />
+          )}
 
           {/* 实时结果 / 已存结果（按模式高亮） */}
           {liveResult && (() => {

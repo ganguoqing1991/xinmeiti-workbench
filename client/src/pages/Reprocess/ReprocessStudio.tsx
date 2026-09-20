@@ -46,7 +46,9 @@ import {
 import { formatTime } from '../../utils/format';
 
 // ===== 阶段定义 =====
-const STAGES = [
+// 小红书走图文五阶段（标题→提纲→分页→配图→成绩）；
+// 抖音只做「出稿」，不碰配图与成绩：标题 → 二创口播稿。
+const STAGES_XHS = [
   { key: 'title', label: '标题', icon: Type, desc: '选定发布标题' },
   { key: 'outline', label: '提纲', icon: ListTree, desc: '列出内容要点' },
   { key: 'sections', label: '分页', icon: Layers, desc: '逐页撰写正文' },
@@ -54,9 +56,15 @@ const STAGES = [
   { key: 'metrics', label: '成绩', icon: BarChart3, desc: '发布后数据回填' },
 ] as const;
 
+const STAGES_DY = [
+  { key: 'title', label: '标题', icon: Type, desc: 'AI 出 3 个方案' },
+  { key: 'script', label: '二创口播稿', icon: Mic, desc: 'AI 出 3 个方案' },
+] as const;
+
 const EMPTY_STUDIO: ReprocessStudio = {
   stage: 0,
   titleOptions: [],
+  scriptOptions: [],
   outline: [],
   sections: [],
   images: [],
@@ -179,14 +187,16 @@ export const StudioPanel: React.FC<{
           <Sparkles className="w-12 h-12 text-white/20 mx-auto mb-3" />
           <p className="text-base text-white/50">从左侧任务栏选择一个任务开始创作</p>
           <p className="text-xs text-white/30 mt-1.5">
-            标题 → 提纲 → 分页 → 配图 → 成绩，五步走完一篇可直接发布的笔记
+            小红书：标题 → 提纲 → 分页 → 配图 → 成绩 · 抖音：标题 → 二创口播稿
           </p>
         </div>
       </GlassCard>
     );
   }
 
-  const stage = Math.min(Math.max(studio.stage || 0, 0), STAGES.length - 1);
+  const isDouyin = task.platform === 'douyin';
+  const stages = isDouyin ? STAGES_DY : STAGES_XHS;
+  const stage = Math.min(Math.max(studio.stage || 0, 0), stages.length - 1);
   const content = task.content || '';
 
   // ===== AI 动作 =====
@@ -220,7 +230,9 @@ export const StudioPanel: React.FC<{
           {
             role: 'system',
             content: sysOf(
-              '你只输出标题，不要解释。基于原稿产出 3 个风格不同的备选标题，每行一个、不加序号：第一个吸睛反差、第二个干货价值、第三个情绪共鸣。'
+              isDouyin
+                ? '你只输出标题，不要解释。基于原稿产出 3 个风格不同的抖音标题（22 字内，口语化、有钩子、适合口播开头），每行一个、不加序号：第一个反差吸睛、第二个干货价值、第三个情绪共鸣。'
+                : '你只输出标题，不要解释。基于原稿产出 3 个风格不同的备选标题（小红书 18 字内），每行一个、不加序号：第一个吸睛反差、第二个干货价值、第三个情绪共鸣。'
             ),
           },
           {
@@ -239,7 +251,41 @@ export const StudioPanel: React.FC<{
       showToast('success', `已生成 ${titles.length} 个标题方案`);
     });
 
-  // 2. 提纲
+  // 2（抖音）. 二创口播稿：一次出 3 个方案，方案之间用 === 分隔
+  const genScriptOptions = () =>
+    runAI('script', async () => {
+      setAiProgress('正在生成口播稿方案...');
+      const text = await callLLMOnce(
+        effectiveLLM,
+        [
+          {
+            role: 'system',
+            content: sysOf(
+              '你是抖音口播稿写手。基于标题与原稿，产出 3 个不同风格的二创口播稿方案，每个方案包含：\n' +
+                '① Hook（前 3 秒，必须抓眼球）\n' +
+                '② 痛点/冲突（5-10 秒）\n' +
+                '③ 方法/干货（15-30 秒）\n' +
+                '④ 行动号召（最后 5 秒）\n' +
+                '要求：口语化、短句、能直接照着念；每篇 150-260 字；方案之间用单独一行 === 分隔；不要写序号、标题和任何解释。'
+            ),
+          },
+          {
+            role: 'user',
+            content: `【标题】${studio.chosenTitle || task.title}\n【原稿】\n${content.slice(0, 2500)}`,
+          },
+        ],
+        setAiProgress
+      );
+      const scripts = text
+        .split(/^={3,}$/m)
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, 3);
+      if (scripts.length) patchStudio({ scriptOptions: scripts });
+      showToast('success', `已生成 ${scripts.length} 个口播稿方案`);
+    });
+
+  // 2. 提纲（小红书）
   const genOutline = () =>
     runAI('outline', async () => {
       setAiProgress('正在生成提纲...');
@@ -396,7 +442,19 @@ export const StudioPanel: React.FC<{
       showToast('error', '当前任务还没有生成结果，先在下方加入批量队列生成一次');
       return;
     }
-    const { titles, body, tags } = parseRecreateResult(result);
+    const { titles, body } = parseRecreateResult(result);
+    if (isDouyin) {
+      // 抖音只要标题 + 整篇口播稿
+      patchStudio({
+        titleOptions: titles.length ? titles : studio.titleOptions,
+        chosenTitle: titles[0] || studio.chosenTitle,
+        scriptOptions: body ? [body, ...studio.scriptOptions.filter((s) => s !== body)] : studio.scriptOptions,
+        chosenScript: body || studio.chosenScript,
+        stage: 0,
+      });
+      showToast('success', '已导入生成结果：标题方案 + 口播稿（可继续改）');
+      return;
+    }
     const sections = body
       ? body.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean)
       : [];
@@ -490,8 +548,27 @@ export const StudioPanel: React.FC<{
               批量生成与下方各步骤的 AI 动作都会参考此 Skill；是否启用在「管理」列表里勾选。
             </p>
           </div>
-          {/* 生图模型 */}
-          <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+          {/* 抖音：文案模型（不出图，只需文案模型） */}
+          {isDouyin && (
+            <div className="p-3 rounded-lg bg-white/5 border border-white/10">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs text-white/60">文案模型</span>
+                <Link
+                  to="/api"
+                  className="text-[11px] text-purple-300 hover:text-purple-200 flex items-center gap-0.5"
+                >
+                  去配置 <ExternalLink className="w-3 h-3" />
+                </Link>
+              </div>
+              <p className="text-sm text-white font-medium">{effectiveLLM.modelName || '未配置模型'}</p>
+              <p className="text-[11px] text-white/40 mt-1">
+                标题与二创口播稿都用这个模型生成；抖音走纯文案流程，不生成图片。
+              </p>
+            </div>
+          )}
+
+          {/* 生图模型（仅小红书需要配图） */}
+          <div className={`p-3 rounded-lg bg-white/5 border border-white/10 ${isDouyin ? 'hidden' : ''}`}>
             <div className="flex items-center justify-between mb-1.5">
               <span className="text-xs text-white/60">生图模型</span>
               <Link
@@ -564,16 +641,17 @@ export const StudioPanel: React.FC<{
           </h3>
           <p className="text-[11px] text-white/35">每一步都可单独 AI 生成，也可手动修改，随时切步骤</p>
         </div>
-        <div className="grid grid-cols-5 gap-1.5 mb-5">
-          {STAGES.map((s, i) => {
+        <div className={`grid gap-1.5 mb-5 ${isDouyin ? 'grid-cols-2' : 'grid-cols-5'}`}>
+          {stages.map((s, i) => {
             const Icon = s.icon;
             const active = i === stage;
             const done =
-              (i === 0 && (studio.chosenTitle || studio.titleOptions.length > 0)) ||
-              (i === 1 && studio.outline.length > 0) ||
-              (i === 2 && studio.sections.length > 0) ||
-              (i === 3 && studio.images.length > 0) ||
-              (i === 4 && !!(studio.metrics?.likes || studio.metrics?.publishUrl));
+              (s.key === 'title' && (studio.chosenTitle || studio.titleOptions.length > 0)) ||
+              (s.key === 'outline' && studio.outline.length > 0) ||
+              (s.key === 'sections' && studio.sections.length > 0) ||
+              (s.key === 'images' && studio.images.length > 0) ||
+              (s.key === 'metrics' && !!(studio.metrics?.likes || studio.metrics?.publishUrl)) ||
+              (s.key === 'script' && (studio.chosenScript || studio.scriptOptions.length > 0));
             return (
               <button
                 key={s.key}
@@ -673,8 +751,105 @@ export const StudioPanel: React.FC<{
           </div>
         )}
 
-        {/* ===== 步骤 2：提纲 ===== */}
-        {stage === 1 && (
+        {/* ===== 步骤 2（抖音）：二创口播稿 ===== */}
+        {isDouyin && stage === 1 && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <p className="text-xs text-white/50">
+                二创口播稿：AI 一次出 3 个方案，选一个直接用（可再改）
+              </p>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => patchStudio({ scriptOptions: [...studio.scriptOptions, ''] })}
+                  className="text-xs px-2.5 py-1.5 rounded-lg bg-white/5 border border-white/10 text-white/70 hover:bg-white/10 flex items-center gap-1"
+                >
+                  <Plus className="w-3.5 h-3.5" /> 手动加一版
+                </button>
+                <button
+                  onClick={genScriptOptions}
+                  disabled={!!aiBusy}
+                  className="text-xs px-3 py-1.5 rounded-lg bg-gradient-to-r from-purple-500 to-indigo-500 text-white font-medium hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  {busyIcon('script')} AI 生成 3 个方案
+                </button>
+              </div>
+            </div>
+            {studio.scriptOptions.length === 0 ? (
+              <div className="py-6 text-center text-sm text-white/35 rounded-lg border border-dashed border-white/10">
+                还没有口播稿 —— 点上方按钮一次生成 3 个方案
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {studio.scriptOptions.map((sc, i) => {
+                  const chosen = studio.chosenScript === sc;
+                  const seconds = Math.max(1, Math.round((sc.length || 0) / 4.5));
+                  return (
+                    <div
+                      key={i}
+                      className={`p-3 rounded-lg border transition-all ${
+                        chosen ? 'bg-purple-500/15 border-purple-500/40' : 'bg-white/5 border-white/10'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <div className="flex items-center gap-2">
+                          <span
+                            onClick={() => patchStudio({ chosenScript: sc })}
+                            className={`w-4 h-4 rounded-full border-2 shrink-0 flex items-center justify-center cursor-pointer ${
+                              chosen ? 'border-purple-400' : 'border-white/25'
+                            }`}
+                          >
+                            {chosen && <span className="w-2 h-2 rounded-full bg-purple-400" />}
+                          </span>
+                          <span className="text-xs text-white font-medium">方案 {i + 1}</span>
+                          <span className="text-[10px] text-white/35">
+                            {sc.length} 字 · 约 {seconds} 秒
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => {
+                              navigator.clipboard?.writeText(sc);
+                              showToast('success', '口播稿已复制');
+                            }}
+                            className="text-white/40 hover:text-white"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() =>
+                              patchStudio({
+                                scriptOptions: studio.scriptOptions.filter((_, j) => j !== i),
+                                chosenScript: chosen ? undefined : studio.chosenScript,
+                              })
+                            }
+                            className="text-rose-300/60 hover:text-rose-300"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                      <textarea
+                        value={sc}
+                        onChange={(e) =>
+                          patchStudio({ scriptOptions: studio.scriptOptions.map((x, j) => (j === i ? e.target.value : x)) })
+                        }
+                        rows={5}
+                        placeholder="这一版口播稿：Hook / 痛点 / 方法 / 行动号召..."
+                        className="w-full px-2.5 py-2 rounded-lg bg-white/5 border border-white/10 text-sm text-white leading-relaxed resize-none"
+                      />
+                      {chosen && (
+                        <p className="text-[10px] text-purple-200 mt-1">✓ 已选为最终口播稿</p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===== 步骤 2：提纲（小红书） ===== */}
+        {!isDouyin && stage === 1 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <p className="text-xs text-white/50">内容提纲（每条一个要点，按顺序组织钩子 → 价值 → 行动号召）</p>
@@ -721,8 +896,8 @@ export const StudioPanel: React.FC<{
           </div>
         )}
 
-        {/* ===== 步骤 3：分页 ===== */}
-        {stage === 2 && (
+        {/* ===== 步骤 3：分页（小红书） ===== */}
+        {!isDouyin && stage === 2 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <p className="text-xs text-white/50">分页正文（每页即一张图文卡片，可直接编辑）</p>
@@ -780,8 +955,8 @@ export const StudioPanel: React.FC<{
           </div>
         )}
 
-        {/* ===== 步骤 4：配图 ===== */}
-        {stage === 3 && (
+        {/* ===== 步骤 4：配图（小红书） ===== */}
+        {!isDouyin && stage === 3 && (
           <div className="space-y-3">
             <p className="text-xs text-white/50">
               配图：AI 生成或上传替换，每张都可单独重新生成 / 编辑提示词 / 设为封面
@@ -924,8 +1099,8 @@ export const StudioPanel: React.FC<{
           </div>
         )}
 
-        {/* ===== 步骤 5：成绩 ===== */}
-        {stage === 4 && (
+        {/* ===== 步骤 5：成绩（小红书） ===== */}
+        {!isDouyin && stage === 4 && (
           <div className="space-y-3">
             <p className="text-xs text-white/50">发布后把数据填回来，后续复盘可以直接对比（手动记录，随时修改）</p>
             <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5">
@@ -1206,6 +1381,63 @@ export const PhonePreview: React.FC<{ task: ReprocessTask | null }> = ({ task })
           <AlertCircle className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
           还没有配图 —— 在创作流程「配图」步生成或上传后，这里会实时更新。
         </p>
+      )}
+    </GlassCard>
+  );
+};
+
+// ============================================================
+// 抖音右列：当前口播稿预览（纯文案，不做手机壳 / 不做配图）
+// ============================================================
+export const ScriptPreview: React.FC<{ task: ReprocessTask | null }> = ({ task }) => {
+  const studio = useMemo<ReprocessStudio>(() => ({ ...EMPTY_STUDIO, ...(task?.studio || {}) }), [task]);
+  if (!task) {
+    return (
+      <GlassCard hoverable={false}>
+        <div className="py-12 text-center">
+          <Mic className="w-10 h-10 text-white/20 mx-auto mb-3" />
+          <p className="text-sm text-white/40">选择任务后在这里查看口播稿</p>
+        </div>
+      </GlassCard>
+    );
+  }
+  const title = studio.chosenTitle || task.title;
+  const script = studio.chosenScript || studio.scriptOptions[0] || '';
+  const seconds = script ? Math.max(1, Math.round(script.length / 4.5)) : 0;
+
+  return (
+    <GlassCard hoverable={false}>
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="text-white font-semibold text-sm flex items-center gap-2">
+          <Mic className="w-4 h-4 text-cyan-400" /> 当前口播稿
+        </h3>
+        {script && (
+          <button
+            onClick={() => {
+              navigator.clipboard?.writeText(`${title}\n\n${script}`);
+            }}
+            className="text-[11px] px-2 py-1 rounded bg-white/5 border border-white/10 text-white/60 hover:text-white flex items-center gap-1"
+          >
+            <Copy className="w-3 h-3" /> 复制
+          </button>
+        )}
+      </div>
+      <p className="text-sm text-white font-medium leading-snug">{title}</p>
+      {script ? (
+        <>
+          <div className="mt-2 p-3 rounded-lg bg-white/5 border border-white/10 text-xs text-white/70 max-h-72 overflow-y-auto scrollbar-thin whitespace-pre-wrap leading-relaxed">
+            {script}
+          </div>
+          <div className="flex items-center gap-3 mt-2 text-[11px] text-white/45 flex-wrap">
+            <span>{script.length} 字</span>
+            <span>约 {seconds} 秒口播</span>
+            <span>{studio.scriptOptions.length} 个方案</span>
+          </div>
+        </>
+      ) : (
+        <div className="mt-2 p-4 rounded-lg bg-white/5 border border-dashed border-white/10 text-xs text-white/40">
+          还没有口播稿 —— 在中间「二创口播稿」步点「AI 生成 3 个方案」
+        </div>
       )}
     </GlassCard>
   );

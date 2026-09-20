@@ -28,11 +28,16 @@ export interface TaskMetrics {
 
 /** 五阶段工作台数据，全部可选（旧任务没有这些字段也能正常打开） */
 export interface ReprocessStudio {
-  stage: number; // 当前所在步骤 0 标题 / 1 提纲 / 2 分页 / 3 配图 / 4 成绩
+  // 小红书：0 标题 / 1 提纲 / 2 分页 / 3 配图 / 4 成绩
+  // 抖音：0 标题 / 1 二创口播稿（抖音只出稿，不做配图与成绩）
+  stage: number;
   titleOptions: string[]; // 标题方案（AI 生成或手动添加）
   chosenTitle?: string;
-  outline: string[]; // 提纲要点
-  sections: string[]; // 分页正文（每页一段）
+  /** 抖音「二创口播稿」的 3 个方案（整篇口播稿，含 Hook/主体/行动号召） */
+  scriptOptions: string[];
+  chosenScript?: string;
+  outline: string[]; // 提纲要点（小红书用）
+  sections: string[]; // 分页正文（小红书用）
   images: TaskImage[];
   metrics?: TaskMetrics;
   /** 生图是否跟随文案模型（共用 Key/BaseURL），缺省 true */
