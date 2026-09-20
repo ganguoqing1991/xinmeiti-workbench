@@ -184,3 +184,42 @@ async function callSingle(
 
 export { callLLMStream };
 
+// ===== 非流式单次调用（标题方案 / 提纲 / 分页 / 配图提示词等短结构化输出用）=====
+// 只走 chat/completions（结构化短输出不需要流式体验），返回纯文本
+export async function callLLMOnce(
+  cfg: LLMConfig,
+  messages: { role: 'system' | 'user' | 'assistant'; content: string }[],
+  onProgress?: (msg: string) => void
+): Promise<string> {
+  const baseUrl = cfg.baseUrl.replace(/\/+$/, '');
+  const url = `${baseUrl}/chat/completions`;
+  onProgress?.('正在请求模型...');
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${cfg.apiKey}` },
+      body: JSON.stringify({
+        model: cfg.modelName,
+        messages,
+        temperature: cfg.temperature,
+        max_tokens: cfg.maxTokens || 4096,
+        stream: false,
+      }),
+    });
+  } catch (e: any) {
+    throw new Error(`网络错误：${e?.message || '未知'}`);
+  }
+  const rawText = await res.text().catch(() => '');
+  if (!res.ok) throw new Error(`HTTP ${res.status} · ${rawText.slice(0, 200)}`);
+  let j: any;
+  try {
+    j = JSON.parse(rawText);
+  } catch {
+    throw new Error(`返回非 JSON：${rawText.slice(0, 200)}`);
+  }
+  const text: string = j?.choices?.[0]?.message?.content || '';
+  if (!text) throw new Error(`模型返回为空：${JSON.stringify(j).slice(0, 200)}`);
+  return text;
+}
+

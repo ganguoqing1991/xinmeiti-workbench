@@ -767,3 +767,99 @@ export function removeSkill(platform: Platform, id: string) {
     getSkills(platform).filter((s) => s.id !== id)
   );
 }
+
+// ===== 生图模型配置（全局共享）=====
+// 文案模型负责改写/分析等文本；生图模型负责「配图」阶段的 AI 出图。
+// 二者 Key/BaseURL 可以一致（sameAsLLM=true 跟随文案模型，省一次配置），
+// 也可以在 API 配置页单独填一套（不同厂商 / 不同账号额度）。
+// 模型名与出图尺寸始终在本配置里独立填写，不受「是否共用 Key」影响。
+export interface ImageGenConfig {
+  /** 生图是否跟随文案模型（共用 apiKey + baseUrl） */
+  sameAsLLM: boolean;
+  /** 仅 sameAsLLM=false 时使用 */
+  apiKey: string;
+  baseUrl: string;
+  /** 生图模型名，如 doubao-seedream-4-0-250828 / gpt-image-1 / seedream-3.0-t2i */
+  modelName: string;
+  /** 出图尺寸，如 1024x1024 / 864x1152（3:4 竖版，适配小红书封面） */
+  size: string;
+}
+
+const STORAGE_KEY_IMAGEGEN_GLOBAL = 'reprocess_imagegen_global_v1';
+
+export const DEFAULT_IMAGEGEN: ImageGenConfig = {
+  sameAsLLM: true,
+  apiKey: '',
+  baseUrl: 'https://ark.cn-beijing.volces.com/api/v3',
+  modelName: 'doubao-seedream-4-0-250828',
+  size: '864x1152',
+};
+
+export function getImageGenConfig(): ImageGenConfig {
+  return readJSON<ImageGenConfig>(STORAGE_KEY_IMAGEGEN_GLOBAL, DEFAULT_IMAGEGEN);
+}
+
+export function setImageGenConfig(cfg: ImageGenConfig) {
+  writeJSON(STORAGE_KEY_IMAGEGEN_GLOBAL, cfg);
+}
+
+export function resetImageGenConfig() {
+  writeJSON(STORAGE_KEY_IMAGEGEN_GLOBAL, DEFAULT_IMAGEGEN);
+}
+
+/**
+ * 生图（OpenAI images/generations 兼容协议）。
+ * - 火山方舟 seedream / 即梦、OpenAI gpt-image-1 / dall-e-3、硅基流动等均为该协议
+ * - 返回兼容两种数据：{ url }（火山/OpenAI url 模式）与 { b64_json }（gpt-image-1 默认），
+ *   统一转成可直接放进 <img src> 的字符串（http url 或 dataURL）
+ */
+export async function callImageGen(
+  llmCfg: LLMConfig,
+  imgCfg: ImageGenConfig,
+  prompt: string,
+  onProgress?: (msg: string) => void
+): Promise<string> {
+  const baseUrl = (imgCfg.sameAsLLM ? llmCfg.baseUrl : imgCfg.baseUrl || '').replace(/\/+$/, '');
+  const apiKey = imgCfg.sameAsLLM ? llmCfg.apiKey : imgCfg.apiKey;
+  const model = (imgCfg.modelName || '').trim();
+  if (!baseUrl) throw new Error('生图 Base URL 为空：请在「API 配置 → 生图模型」中填写');
+  if (!apiKey) throw new Error('生图 API Key 为空：请在「API 配置 → 生图模型」中填写');
+  if (!model) throw new Error('生图模型名为空：请填写如 doubao-seedream-4-0-250828 / gpt-image-1');
+
+  const url = `${baseUrl}/images/generations`;
+  onProgress?.('正在生成图片...');
+  const body: Record<string, unknown> = {
+    model,
+    prompt,
+    n: 1,
+    size: imgCfg.size || '1024x1024',
+  };
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify(body),
+    });
+  } catch (e: any) {
+    throw new Error(
+      `网络/CORS 错误：${e?.message || '未知'}。部分生图服务不允许浏览器直连，可在生图配置里换用支持 CORS 的端点（如火山方舟）。`
+    );
+  }
+  const rawText = await res.text().catch(() => '');
+  if (!res.ok) {
+    throw new Error(`生图失败 HTTP ${res.status} · ${rawText.slice(0, 200)}`);
+  }
+  let j: any;
+  try {
+    j = JSON.parse(rawText);
+  } catch {
+    throw new Error(`生图返回非 JSON：${rawText.slice(0, 200)}`);
+  }
+  const item = j?.data?.[0] || {};
+  if (typeof item.url === 'string' && item.url) return item.url;
+  if (typeof item.b64_json === 'string' && item.b64_json) {
+    return `data:image/png;base64,${item.b64_json}`;
+  }
+  throw new Error(`生图返回为空：${JSON.stringify(j).slice(0, 200)}`);
+}

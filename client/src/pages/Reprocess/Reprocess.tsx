@@ -36,6 +36,7 @@ import {
 } from 'lucide-react';
 import GlassCard from '../../components/GlassCard';
 import Modal from '../../components/Modal';
+import { StudioPanel, PhonePreview } from './ReprocessStudio';
 import { getReprocessTasks, removeReprocessTask, removeManyReprocessTasks, clearReprocessQueue, updateReprocessTask, type ReprocessTask } from '../../utils/reprocessQueue';
 import {
   getMyLLMConfig,
@@ -513,42 +514,12 @@ const Reprocess: React.FC = () => {
         </div>
       )}
 
-      {/* Skill 列表（直接展示） */}
-      <SkillPanel
-        platform={platform}
-        skills={skills}
-        cloudEnabled={SKILL_CLOUD_ENABLED}
-        onAdd={() => setShowAddSkill(true)}
-        onUpload={async (newSkills) => {
-          await Promise.all(
-            newSkills.map((s) => addSkillRemote(platform, { label: s.label, prompt: s.prompt }, 'personal'))
-          );
-          refreshSkills();
-          showToast('success', `✓ 已上传 ${newSkills.length} 个 Skill`);
-        }}
-        onEdit={(s) => setEditingSkill(s)}
-        onDelete={async (id) => {
-          if (window.confirm('确定删除此 Skill？')) {
-            await removeSkillRemote(platform, id);
-            refreshSkills();
-            showToast('success', '已删除 Skill');
-          }
-        }}
-        onToggle={async (id, enabled) => {
-          await updateSkillRemote(platform, id, { enabled });
-          refreshSkills();
-        }}
-        onMigrate={async (scope) => {
-          const n = await migrateLocalSkills(platform, scope);
-          refreshSkills();
-          showToast('success', `✓ 已迁移 ${n} 个本地 Skill 到云端`);
-        }}
-      />
+      {/* Skill 管理面板已移入「创作依据」工作台（StudioPanel 的 skillsSlot），点「管理（含启用）」展开 */}
 
-      {/* 主体：左任务栏（多选+状态） + 右加工设置/结果 */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-5">
-        {/* 任务栏 */}
-        <div className="lg:col-span-2">
+      {/* 主体：左任务栏（多选+状态） + 中创作工作台（五阶段） + 右实时预览/结果 */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
+        {/* 左列：任务栏 */}
+        <div className="xl:col-span-3 space-y-5">
           <GlassCard hoverable={false}>
             {/* 任务栏头部：全选 + 开始全部 + 运行状态 */}
             <div className="flex items-center justify-between mb-3 gap-2 flex-wrap">
@@ -721,87 +692,6 @@ const Reprocess: React.FC = () => {
               </button>
             )}
           </GlassCard>
-        </div>
-
-        {/* 右侧：加工设置 + 结果 */}
-        <div className="lg:col-span-3 space-y-5">
-          {/* 选中任务信息 */}
-          {selectedTask ? (
-            <GlassCard hoverable={false}>
-              <div className="flex items-start gap-4">
-                {selectedTask.coverUrl && (
-                  <img
-                    src={selectedTask.coverUrl}
-                    alt={selectedTask.title}
-                    className="w-24 h-24 rounded-xl object-cover shrink-0"
-                    loading="lazy"
-                    referrerPolicy="no-referrer"
-                  />
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                    <StatusBadge status={selectedTask.status} />
-                    <span className="text-xs text-white/50">
-                      {selectedTask.accountName} · {selectedTask.platform === 'xiaohongshu' ? '小红书' : '抖音'}
-                    </span>
-                  </div>
-                  <h3 className="text-white font-semibold text-base leading-snug">{selectedTask.title}</h3>
-                  <p className="text-sm text-white/50 mt-1.5">
-                    {formatTime(selectedTask.addedAt)}
-                    {selectedTask.resultAt && ` · 完成于 ${formatTime(selectedTask.resultAt)}`}
-                  </p>
-                  {(selectedTask as any).audioUrl || (selectedTask as any).videoUrl ? (
-                    <button
-                      onClick={handleExtract}
-                      className="mt-3 text-sm px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 text-white font-medium hover:opacity-90 inline-flex items-center gap-1.5"
-                      title={
-                        (selectedTask as any).transcripted
-                          ? '已提取（再次点击重新转写）'
-                          : (selectedTask as any).videoUrl && effectiveLLM.useVideoUnderstanding
-                          ? '用多模态 LLM 看视频提取文案'
-                          : '用 ASR 从「音频文件链接」提取口播稿'
-                      }
-                    >
-                      <Mic className="w-4 h-4" />
-                      {(selectedTask as any).transcripted ? '已提取文案 · 重新提取' : '🎙️ 提取口播文案'}
-                    </button>
-                  ) : null}
-                  {(selectedTask as any).content && (
-                    <details className="mt-3" open={!!(selectedTask as any).transcripted}>
-                      <summary className="text-sm text-white/60 cursor-pointer hover:text-white/80">
-                        📝 查看原文内容
-                        {(selectedTask as any).transcripted && (
-                          <span className="ml-2 text-xs px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300">
-                            已提取文案
-                          </span>
-                        )}
-                        <span className="ml-1 text-xs text-white/30">
-                          {((selectedTask as any).content || '').length} 字
-                        </span>
-                      </summary>
-                      {/(没有提供|未提供|请提供.*链接|无法访问|无法获取)/.test((selectedTask as any).content) &&
-                      ((selectedTask as any).content || '').length < 120 ? (
-                        <div className="mt-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm text-amber-200">
-                          ⚠️ 原文内容疑似占位/拒绝文本——请点「重新提取」，并确认链接是可直接访问的音/视频直链。
-                        </div>
-                      ) : (
-                        <div className="mt-2 p-3 rounded-lg bg-white/5 border border-white/10 text-sm text-white/70 max-h-48 overflow-y-auto scrollbar-thin whitespace-pre-wrap">
-                          {selectedTask.content}
-                        </div>
-                      )}
-                    </details>
-                  )}
-                </div>
-              </div>
-            </GlassCard>
-          ) : (
-            <GlassCard hoverable={false}>
-              <div className="py-14 text-center">
-                <Sparkles className="w-12 h-12 text-white/20 mx-auto mb-3" />
-                <p className="text-base text-white/50">从左侧任务栏选择一个任务查看</p>
-              </div>
-            </GlassCard>
-          )}
 
           {/* 加工设置：模式 + Skill + 开始选中 */}
           <GlassCard hoverable={false}>
@@ -891,6 +781,55 @@ const Reprocess: React.FC = () => {
               处理中可切走页面，回来自动同步，完成的任务会推送到右上角通知中心。
             </p>
           </GlassCard>
+        </div>
+
+        {/* 中列：创作工作台（原稿展示 + 创作依据 + 标题/提纲/分页/配图/成绩五阶段） */}
+        <div className="xl:col-span-6">
+          <StudioPanel
+            task={selectedTask}
+            effectiveLLM={effectiveLLM}
+            skillPrompt={batchSkill?.prompt || ''}
+            skillLabel={batchSkill ? batchSkill.label : ''}
+            showToast={showToast}
+            onExtract={handleExtract}
+            skillsSlot={
+              <SkillPanel
+                platform={platform}
+                skills={skills}
+                cloudEnabled={SKILL_CLOUD_ENABLED}
+                onAdd={() => setShowAddSkill(true)}
+                onUpload={async (newSkills) => {
+                  await Promise.all(
+                    newSkills.map((s) => addSkillRemote(platform, { label: s.label, prompt: s.prompt }, 'personal'))
+                  );
+                  refreshSkills();
+                  showToast('success', `✓ 已上传 ${newSkills.length} 个 Skill`);
+                }}
+                onEdit={(s) => setEditingSkill(s)}
+                onDelete={async (id) => {
+                  if (window.confirm('确定删除此 Skill？')) {
+                    await removeSkillRemote(platform, id);
+                    refreshSkills();
+                    showToast('success', '已删除 Skill');
+                  }
+                }}
+                onToggle={async (id, enabled) => {
+                  await updateSkillRemote(platform, id, { enabled });
+                  refreshSkills();
+                }}
+                onMigrate={async (scope) => {
+                  const n = await migrateLocalSkills(platform, scope);
+                  refreshSkills();
+                  showToast('success', `✓ 已迁移 ${n} 个本地 Skill 到云端`);
+                }}
+              />
+            }
+          />
+        </div>
+
+        {/* 右列：手机实时预览 + 结果 + 历史 */}
+        <div className="xl:col-span-3 space-y-5">
+          <PhonePreview task={selectedTask} />
 
           {/* 实时结果 / 已存结果（按模式高亮） */}
           {liveResult && (() => {

@@ -5,6 +5,44 @@
 import type { Platform } from '../types';
 import { archiveTaskResult } from './reprocessHistory';
 
+// ===== 创作工作台数据（标题 → 提纲 → 分页 → 配图 → 成绩 五阶段）=====
+/** 配图阶段的一张图：AI 生成或手动上传，可整体替换 */
+export interface TaskImage {
+  id: string;
+  url: string; // http(s) url 或 dataURL
+  prompt: string; // 生图提示词（重新生成时使用）
+  source: 'ai' | 'upload';
+  isCover: boolean;
+  createdAt: string;
+}
+
+/** 成绩阶段：发布后的数据记录 */
+export interface TaskMetrics {
+  publishedAt?: string;
+  publishUrl?: string;
+  likes?: number;
+  collects?: number;
+  comments?: number;
+  shares?: number;
+}
+
+/** 五阶段工作台数据，全部可选（旧任务没有这些字段也能正常打开） */
+export interface ReprocessStudio {
+  stage: number; // 当前所在步骤 0 标题 / 1 提纲 / 2 分页 / 3 配图 / 4 成绩
+  titleOptions: string[]; // 标题方案（AI 生成或手动添加）
+  chosenTitle?: string;
+  outline: string[]; // 提纲要点
+  sections: string[]; // 分页正文（每页一段）
+  images: TaskImage[];
+  metrics?: TaskMetrics;
+  /** 生图是否跟随文案模型（共用 Key/BaseURL），缺省 true */
+  imageSameAsLLM?: boolean;
+  /** 生图模型名（独立于文案模型） */
+  imageModelName?: string;
+  /** 出图尺寸 */
+  imageSize?: string;
+}
+
 export interface ReprocessTask {
   id: string; // 任务 ID（生成时给）
   postId: string; // 原始内容 ID
@@ -32,6 +70,8 @@ export interface ReprocessTask {
   resultAt?: string;
   // ASR 提取标记：true 表示 content 已被 ASR 转写填充
   transcripted?: boolean;
+  // 五阶段创作工作台数据（标题/提纲/分页/配图/成绩），可选
+  studio?: ReprocessStudio;
 }
 
 const STORAGE_KEY = 'reprocess_queue_v1';
